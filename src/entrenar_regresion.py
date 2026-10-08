@@ -1,24 +1,17 @@
-<<<<<<< HEAD
-"""Sprint 1, regresión: entrena el modelo de popularidad (Ridge) y escribe models/modelo.pkl.
 
+"""Sprint 1, regresión: entrena el modelo de popularidad (Ridge) y escribe models/modelo.pkl.
+ 
 Regresión Ridge sobre las variables disponibles antes del lanzamiento, más duración al
 cuadrado, entrenada con las canciones de 1995 a 2019 y evaluada con las de 2020 a 2025.
 El alpha se elige con validación cruzada temporal dentro del periodo de entrenamiento.
-=======
-"""Sprint 1, regresión: entrena el modelo de popularidad y escribe models/modelo.pkl.
-
-Regresión lineal sobre las variables disponibles antes del lanzamiento, más duración al
-cuadrado, entrenada con las canciones de 1995 a 2019 y evaluada con las de 2020 a 2025.
->>>>>>> 227667f56d1b89487e6cc557f948c49c17dbb577
-
+ 
     python -m src.entrenar_regresion
-
+ 
 Para usar su propio modelo, cambie `construir_pipeline`, `NOMBRE` y, si lo decide, `CORTE_PROMOCION`.
 """
 
 import numpy as np
 import pandas as pd
-<<<<<<< HEAD
 from sklearn.linear_model import RidgeCV
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import TimeSeriesSplit
