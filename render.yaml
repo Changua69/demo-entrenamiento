@@ -1,7 +1,7 @@
 # Render: New + > Blueprint > seleccionar su repositorio.
 services:
   - type: web
-    name: demo-reg-clas-canciones
+    name: demo-reg-clas-canciones1
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
