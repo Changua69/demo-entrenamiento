@@ -1,106 +1,243 @@
-<div align="center">
-
 # Predicción de popularidad de canciones
 
-Repositorio base del taller en dos sprints: regresión lineal y clasificación binaria
+Taller en dos sprints para una disquera que debe decidir, **antes del lanzamiento**, en qué canciones invertir promoción.
 
-[![Python](https://img.shields.io/badge/Python-3.11%20a%203.13-3776AB?logo=python&logoColor=white)](https://www.python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![scikit-learn](https://img.shields.io/badge/scikit--learn-1.6-F7931E?logo=scikitlearn&logoColor=white)](https://scikit-learn.org)
-[![Deploy](https://img.shields.io/badge/Deploy-Render-46E3B7?logo=render&logoColor=white)](https://render.com)
+- **Sprint 1, regresión:** estimar la popularidad (0 a 100) de una canción nueva y recomendar si se promociona.
+- **Sprint 2, clasificación binaria:** decidir la promoción según lo que cuesta equivocarse.
 
-</div>
+Cada sprint cierra con un incremento en producción: un servicio FastAPI publicado en Render que lee un único archivo, `models/modelo.pkl`, con el modelo entrenado y su ficha.
+
+> Universidad Central, Ingeniería de Sistemas, 2026-2. Autor: **[Nombre del estudiante]**
 
 ---
 
-Una disquera debe decidir, antes del lanzamiento, en qué canciones invertir promoción. Este repositorio contiene un servicio de predicción listo para publicar y el código con el que se entrenaron los modelos de referencia de los dos sprints del taller.
+## Resumen de resultados
 
-El servicio lee un único archivo, `models/modelo.pkl`, con el modelo entrenado y su ficha. En cada sprint usted reemplaza ese archivo por el de su propio modelo y publica el servicio en Render. El código del servicio no se toca, porque todo lo que necesita para responder está en la ficha.
+Evaluación sobre las 415 canciones de 2020-2025, que no intervienen en ninguna decisión de entrenamiento.
 
-## Los dos sprints
-
-Cada sprint cierra con un incremento en producción: su servicio publicado en Render con un modelo propio.
-
-| | Sprint 1: regresión lineal | Sprint 2: clasificación binaria |
+| | Sprint 1: regresión | Sprint 2: clasificación |
 |---|---|---|
-| Objetivo del sprint | Estimar la popularidad de una canción nueva y recomendar si se promociona | Decidir la promoción según lo que cuesta equivocarse |
-| Pregunta | ¿Qué popularidad alcanzará la canción? | ¿La canción será un hit? |
 | Objetivo del modelo | `popularidad` (0 a 100) | `es_hit` (1 si la popularidad llega a 70) |
 | Variables excluidas | `reproducciones_sem1`, `es_hit` | `reproducciones_sem1`, `popularidad` |
 | Modelo de referencia | Regresión lineal con duración² | Regresión logística |
-| Resultado de referencia (2020-2025) | MAE 5,75; la línea base obtiene 10,44 | Costo 99; la línea base obtiene 318 |
-| Regla de decisión | Promocionar si la popularidad esperada supera 65 | Promocionar si la probabilidad de hit supera 0,27 |
+| **Modelo publicado** | **Ridge con duración²** | **Gradient boosting con umbral por costos** |
+| Resultado del modelo publicado | MAE 5,76; RMSE 7,16; R² 0,718; sesgo +0,27 | Costo 114; precisión 0,636; recall 0,792 |
+| Línea base | MAE 10,44 (media por género) | Costo 318 (nunca promocionar); 309 (siempre promocionar) |
+| Resultado de referencia | MAE 5,75 | Costo 99 |
+| Regla de decisión | Promocionar si la popularidad esperada supera 65 | Promocionar si la probabilidad de hit supera 0,22 |
 | Código de entrenamiento | `src/entrenar_regresion.py` | `src/entrenar_clasificacion.py` |
 
-El sprint 1 está disponible y el repositorio trae su modelo de referencia en `models/modelo.pkl`. El sprint 2 usa el mismo servicio con otro archivo de modelo. En ambos se entrena con las canciones de 1995 a 2019 y se evalúa con las de 2020 a 2025.
+En clasificación, la **regresión logística** (el modelo de referencia) obtuvo un costo menor que el gradient boosting: 99 frente a 114. Ambos se documentan en el registro comparativo de más abajo.
 
-## Cómo trabajar cada sprint
+---
 
-1. Clone el repositorio e instale las dependencias, como se explica en [Ejecución local](#ejecución-local).
-2. Entrene su modelo y guárdelo en `models/modelo.pkl` con su ficha.
-3. Compruebe con `pytest -q` que el servicio lo carga y responde.
-4. Suba el cambio a su repositorio en GitHub y publique el servicio en Render.
-5. Revise la definición de terminado y entregue la URL del servicio.
+## Datos
 
-En el sprint 2 se repiten los pasos 2 a 5 con el clasificador. La URL no cambia.
+- `data/canciones.csv`: 2.000 canciones **sintéticas** lanzadas entre 1995 y 2025.
+- **Entrenamiento:** 1.585 canciones de 1995 a 2019.
+- **Prueba:** 415 canciones de 2020 a 2025, de las cuales 106 (25,5 %) fueron hit.
+- Columnas de entrada disponibles antes del lanzamiento: `bailabilidad`, `energia`, `valencia`, `acustica`, `tempo`, `duracion_min`, `volumen_db`, `anio`, `colaboracion` y `genero` (pop, urbano, rock, electrónica, indie).
 
-### Definición de terminado
+---
 
-- [ ] `pytest -q` pasa con su `models/modelo.pkl`.
-- [ ] La ficha (`GET /modelo`) reporta las métricas de su propia evaluación sobre 2020-2025, y su modelo supera la línea base.
-- [ ] El servicio está publicado en Render con su modelo.
-- [ ] `python -m src.probar_servicio SU_URL` termina con "servicio en orden". Con esta prueba se califica.
+## Metodología
 
-## Crear su modelo
+### 1. Momento de la predicción y control de fuga
 
-La forma más directa es editar `construir_pipeline()` y `NOMBRE` en el script del sprint y ejecutarlo. El script se encarga del resto y deja el archivo en `models/modelo.pkl`.
+La predicción se necesita antes del lanzamiento, así que solo son legítimas las variables que existen en ese momento. Cada columna se revisó contra esa regla:
+
+| Columna | ¿Existe antes de lanzar? | Decisión | Razón |
+|---|---|---|---|
+| Atributos de audio, `anio`, `colaboracion`, `genero` | Sí | Entra | Se conocen al decidir |
+| `reproducciones_sem1` | No | Fuera | Ocurre una semana **después** del lanzamiento (fuga: posterior al evento) |
+| `es_hit` | No | Fuera en regresión | Se calcula con el objetivo (popularidad ≥ 70) |
+| `popularidad` | No | Fuera en clasificación | Define `es_hit`; usarla equivale a conocer la respuesta |
+
+Las dos columnas con fuga tienen una correlación muy alta con el objetivo (0,99 y 0,67 en entrenamiento). Una correlación casi perfecta no es un hallazgo: es una pregunta sobre cuándo y cómo se calculó la columna.
+
+### 2. Partición temporal
+
+Se entrena con el pasado (1995-2019) y se prueba con el futuro (2020-2025) **una sola vez**. Una partición aleatoria mezclaría épocas y podría dar un error más optimista que el real en uso.
+
+Las decisiones internas (el `alpha` de Ridge y el umbral por costos) se toman dentro del periodo de entrenamiento con `TimeSeriesSplit` (ventana creciente), de modo que 2020-2025 no interviene en ninguna elección.
+
+### 3. Pipeline
+
+Todo el preprocesamiento vive dentro del pipeline, que recibe las 10 columnas crudas:
+
+```
+columnas crudas → derivar (duración²) → codificar y escalar → estimador → predicción
+```
+
+- `duracion_c2 = (duracion_min − 3,5)²`: término cuadrático centrado en 3,5 minutos, definido en `src/variables.py`.
+- `OneHotEncoder` para `genero` y `StandardScaler` para las numéricas, ajustados solo con entrenamiento.
+- Cambiar de algoritmo es cambiar el último paso del pipeline; el resto se conserva.
+
+### 4. El artefacto
+
+`models/modelo.pkl` contiene un diccionario con el pipeline entrenado, la **ficha** del modelo (qué predice, con qué datos, qué error tiene y qué decisión sostiene) y las columnas de entrada. El servicio no cambia cuando cambia el modelo, porque las decisiones viajan en la ficha.
+
+---
+
+## Sprint 1: regresión
+
+**Pregunta:** ¿qué popularidad alcanzará la canción?
+
+**Modelo publicado:** Ridge con duración², con `RidgeCV` y `alpha` elegido por validación cruzada temporal (5 pliegues, métrica MAE). Resultado: `alpha = 3,556`.
+
+### Resultado (2020-2025)
+
+| Métrica | Valor |
+|---|---|
+| MAE | 5,76 |
+| RMSE | 7,16 |
+| R² | 0,718 |
+| Sesgo (real − esperado) | +0,27 |
+| MAE de la línea base (media por género) | 10,44 |
+
+El error baja de 10,44 a 5,76 puntos, una mejora de cerca del 45 % frente a la línea base. El R² es la fracción de la varianza explicada, no un porcentaje de aciertos.
+
+### Desempeño por género
+
+Un sesgo positivo indica que el modelo **subestima**; uno negativo, que **sobreestima**.
+
+| Género | MAE | Sesgo | Lectura |
+|---|---|---|---|
+| Urbano | 6,04 | +0,48 | Mayor error |
+| Pop | 5,95 | +1,35 | Subestima más de un punto |
+| Indie | 5,70 | −0,93 | Sobreestima |
+| Electrónica | 5,64 | −0,11 | Sin sesgo relevante |
+| Rock | 5,15 | −0,73 | Menor error |
+
+El sesgo global (+0,27) es pequeño y esconde diferencias por segmento. Con un corte de 65, la subestimación en pop puede dejar sin promoción a canciones que sí llegarían a 70, y la sobreestimación en indie puede promocionar canciones que no despegan.
+
+### Coeficientes principales (variables estandarizadas)
+
+| Variable | Coeficiente |
+|---|---|
+| `bailabilidad` | +7,21 |
+| `energia` | +6,01 |
+| género urbano | +5,30 |
+| género indie | −5,24 |
+| género rock | −3,01 |
+
+Describen asociaciones en datos sintéticos, no causas.
+
+### Regla de decisión
+
+**Promocionar si la popularidad esperada supera 65.** El corte lo fija quien responde por el presupuesto, no el modelo.
+
+---
+
+## Sprint 2: clasificación binaria
+
+**Pregunta:** ¿la canción será un hit (popularidad ≥ 70)?
+
+**Modelo publicado:** `HistGradientBoostingClassifier` (profundidad 3, tasa de aprendizaje 0,05, 200 iteraciones, `min_samples_leaf=20`, `l2_regularization=1,0`, sin parada temprana) con umbral elegido por costos.
+
+### Costos de los errores
+
+| Error | Costo |
+|---|---|
+| Falso negativo (dejar sin promoción una canción que sí fue hit) | 3 |
+| Falso positivo (promocionar una canción que no fue hit) | 1 |
+
+Con probabilidades bien calibradas, el umbral óptimo teórico es 1 / (1 + 3) = 0,25. El umbral se elige minimizando el costo con probabilidades fuera de muestra dentro de 1995-2019 (`TimeSeriesSplit`, 4 pliegues).
+
+### Comparación de clasificadores (2020-2025)
+
+| | Logística (referencia) | Gradient boosting (publicado) | Nunca promocionar | Siempre promocionar |
+|---|---|---|---|---|
+| **Costo** | **99** | 114 | 318 | 309 |
+| Umbral | 0,27 | 0,22 | n/d | n/d |
+| Precisión | 0,688 | 0,636 | n/d | n/d |
+| Recall | 0,811 | 0,792 | n/d | n/d |
+| Verdaderos positivos | 86 | 84 | 0 | 106 |
+| Falsos positivos | 39 | 48 | 0 | 309 |
+| Falsos negativos | 20 | 22 | 106 | 0 |
+| Verdaderos negativos | 270 | 261 | 309 | 0 |
+| Canciones promocionadas (de 415) | 125 | 132 | 0 | 415 |
+
+- El costo se verifica a mano: logística 3 × 20 + 39 = 99; boosting 3 × 22 + 48 = 114; "nunca" 3 × 106 = 318.
+- Como el 25,5 % de las canciones de prueba fueron hit, "siempre promocionar" (309) casi empata con "nunca" (318): con costos 3 a 1 se igualan en 25 % de hits. Por eso la línea base exigente es 309, no solo 318.
+- Ambos modelos superan las dos líneas base. El boosting reduce el costo en un 64 % frente a "nunca promocionar"; la logística, en un 69 %.
+- La logística gana en costo, precisión y recall. Los árboles no extrapolan la tendencia del año (toda canción posterior a 2019 se trata como 2019), mientras que la logística sí.
+
+### Regla de decisión
+
+**Promocionar si la probabilidad de hit supera 0,22** (umbral del modelo publicado). Los costos de cada error los fija quien responde por el presupuesto.
+
+---
+
+## Registro comparativo de regresión
+
+Todas las corridas se evalúan sobre las mismas 415 canciones de 2020-2025 y se conservan, incluidas las descartadas.
+
+| Corrida | MAE | Origen | Lectura |
+|---|---|---|---|
+| Media global del entrenamiento | 11,06 | Material del curso | Error de no tener modelo |
+| Media por género | 10,44 | Medido | Línea base |
+| Lineal con duración² | 5,75 | Material del curso | Modelo de referencia |
+| **Ridge con duración²** | **5,76** | Medido | **Publicado** |
+| Lasso con duración² | 5,79 | Medido | `alpha` = 0,057; descartó `tempo` y el indicador de género electrónica |
+| Gradient boosting | 6,63 | Material del curso | Subestima; no extrapola el año |
+| Random Forest | 6,95 | Material del curso | Más complejo no es mejor |
+
+Ridge y Lasso quedan prácticamente iguales a la regresión lineal: con 1.585 canciones y 10 variables, la regularización aporta poco. Que Lasso haya llevado a cero el indicador de electrónica no significa que el género no importe: las indicadoras de género suman 1, así que su efecto pasa al intercepto.
+
+---
+
+## Cómo reproducirlo
+
+Requiere Python 3.11, 3.12 o 3.13 (no 3.14 ni 3.10 o anteriores) y las versiones de `requirements.txt` (scikit-learn 1.6.1).
 
 ```bash
-python -m src.entrenar_regresion       # sprint 1
-python -m src.entrenar_clasificacion   # sprint 2
+git clone <URL-de-este-repositorio>
+cd <carpeta-del-repositorio>
+python -m venv .venv
+source .venv/bin/activate            # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
-Si prefiere trabajar en su notebook, importe las funciones del repositorio para que el servicio pueda cargar lo que usted guarde:
+Entrenar (siempre con `python -m`, desde la raíz, para que el servicio pueda cargar el pickle):
+
+```bash
+python -m src.entrenar_regresion       # Sprint 1: escribe models/modelo.pkl
+python -m src.entrenar_clasificacion   # Sprint 2: escribe models/modelo.pkl
+```
+
+Cada entrenamiento **sobrescribe** `models/modelo.pkl`. Para guardar en otra ruta sin pisar el entregable (cmd de Windows):
+
+```bat
+set RUTA_MODELO=models/modelo_prueba.pkl
+python -m src.entrenar_clasificacion
+set RUTA_MODELO=
+```
+
+Comprobar:
+
+```bash
+pytest -q                            # 9 pruebas
+uvicorn src.app.main:app --reload    # http://127.0.0.1:8000/docs
+python -m src.probar_servicio        # con el servicio arriba, en otra terminal
+```
+
+Inspeccionar la ficha del modelo guardado:
 
 ```python
-import sys
-sys.path.append("ruta/a/demo-reg-clas-canciones")
+from src.artefacto import cargar
 
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import FunctionTransformer
-from src.variables import COLUMNAS_ENTRADA, derivadas, preprocesamiento
-from src.artefacto import guardar
-
-mi_pipeline = make_pipeline(FunctionTransformer(derivadas), preprocesamiento(), MiEstimador())
-mi_pipeline.fit(X_entrenamiento[COLUMNAS_ENTRADA], y_entrenamiento)
-
-guardar(mi_pipeline, mi_ficha, "ruta/a/demo-reg-clas-canciones/models/modelo.pkl")
+f = cargar()["ficha"]
+print(f["nombre"], f["tarea"], f["desempeno"], f["decision"])
 ```
 
-Antes de escribir el archivo, `guardar()` revisa la ficha y prueba el pipeline. Si falta algo, el mensaje de error lo indica.
-
-### Requisitos del archivo
-
-El pipeline recibe las 10 columnas crudas de `COLUMNAS_ENTRADA` (`src/variables.py`) y hace dentro todo el preprocesamiento. Una variable derivada nueva se agrega en `derivadas()` de `src/variables.py`, no en el notebook; de lo contrario el servicio no la encuentra al cargar el archivo.
-
-La ficha debe tener `nombre`, `tarea` (`"regresion"` o `"clasificacion"`), `objetivo`, `momento_prediccion`, `variables_excluidas`, `linea_base`, `desempeno` y `decision`. En regresión, `desempeno` lleva `mae` y `decision` lleva `corte_promocion`. En clasificación, `decision` lleva `umbral` y el modelo debe tener `predict_proba`. Los scripts de `src/` traen una ficha completa de cada tipo.
-
-Entrene con las versiones de `requirements.txt`, porque un `.pkl` creado con otra versión de scikit-learn puede no cargar en Render. Si trabaja en Google Colab, clone el repositorio e instale esas versiones en la primera celda:
-
-```python
-!git clone https://github.com/ebuitrago/demo-reg-clas-canciones.git
-%pip install -q -r demo-reg-clas-canciones/requirements.txt
-```
-
-Luego reinicie la sesión (menú Entorno de ejecución > Reiniciar sesión) para que Colab use las versiones instaladas. En Colab la ruta del repositorio es `/content/demo-reg-clas-canciones`.
-
-El archivo debe pesar menos de 20 MB. Un Random Forest sin límite de profundidad puede pasarse.
+---
 
 ## API
 
 | Método | Ruta | Respuesta |
-|--------|------|-----------|
-| `GET` | `/docs` | Documentación interactiva, donde se pueden probar todas las rutas |
+|---|---|---|
+| `GET` | `/docs` | Documentación interactiva |
 | `GET` | `/salud` | Estado del servicio y modelo cargado |
 | `GET` | `/modelo` | Ficha del modelo |
 | `POST` | `/predecir` | Predicción y decisión para una canción |
@@ -113,90 +250,66 @@ Ejemplo de entrada para `/predecir`:
  "duracion_min": 3.4, "volumen_db": -6.5, "anio": 2026, "colaboracion": 1, "genero": "urbano"}
 ```
 
-Respuesta con el modelo del sprint 1:
+Una entrada con un campo que no existe antes del lanzamiento, como `reproducciones_sem1`, recibe `422`. Ese rechazo es intencional y es parte de la prueba de humo.
 
-```json
-{"tarea": "regresion", "modelo": "lineal + duración² (2026-09-27)",
- "popularidad_esperada": 84.8, "rango": [79.1, 90.6], "corte_promocion": 65.0,
- "probabilidad_hit": null, "umbral": null,
- "promocionar": true, "explicacion": "popularidad esperada 84.8 (±5.75) supera el corte 65"}
+---
+
+## Despliegue y verificación
+
+| Sprint | Modelo publicado | URL | Verificación |
+|---|---|---|---|
+| 1 | Ridge con duración² | `https://demo-reg-clas-canciones-1y5r.onrender.com` | `probar_servicio`: "servicio en orden" |
+| 2 | Gradient boosting con umbral por costos | `https://demo-reg-clas-canciones1-bg3d.onrender.com` | `probar_servicio`: "servicio en orden" (2026-10-18) |
+
+La prueba de humo comprueba cuatro cosas: el servicio responde, la ficha está completa, la predicción de ejemplo es coherente y se rechazan las variables posteriores al lanzamiento.
+
+```bash
+python -m src.probar_servicio https://su-servicio.onrender.com
 ```
 
-Con el modelo del sprint 2, la misma entrada trae valores en `probabilidad_hit` y `umbral`, y `popularidad_esperada`, `rango` y `corte_promocion` llegan en `null`. Si la entrada trae un campo que no existe antes del lanzamiento, como `reproducciones_sem1`, el servicio responde `422`.
+En el plan gratuito de Render el servicio se suspende tras 15 minutos sin uso y la primera petición puede tardar cerca de un minuto.
 
-## Estructura
+---
+
+## Limitaciones
+
+- **Datos sintéticos.** Los resultados describen asociaciones en un conjunto simulado; no son evidencia causal ni se pueden extrapolar a un catálogo real.
+- **Sin información del artista.** Las columnas de entrada no incluyen artista ni historial, que en la práctica suele ser lo más predictivo.
+- **Extrapolación del año.** `anio` entra como variable numérica y el servicio recibe años posteriores a 2019. Los modelos lineales extienden la tendencia; los árboles, no.
+- **Probabilidades sin calibrar.** El umbral por costos depende de las probabilidades del modelo; con un modelo mal calibrado, el umbral óptimo se desplaza.
+- **Sesgo por segmento.** El modelo de regresión subestima pop y sobreestima indie y rock; la decisión de promoción debe leerse con ese sesgo en mente.
+- **Los costos y el corte los fija quien responde por el presupuesto.** El modelo es un insumo; la decisión es del negocio.
+
+---
+
+## Estructura del repositorio
 
 ```
-demo-reg-clas-canciones/
 ├── data/canciones.csv              # 2.000 canciones sintéticas, 1995-2025
-├── models/modelo.pkl               # El archivo que usted reemplaza en cada sprint
+├── models/modelo.pkl               # Modelo entrenado y su ficha
 ├── src/
 │   ├── variables.py                # Columnas de entrada, variables derivadas y partición temporal
 │   ├── artefacto.py                # guardar() y cargar() del modelo
 │   ├── entrenar_regresion.py       # Sprint 1
 │   ├── entrenar_clasificacion.py   # Sprint 2
-│   ├── probar_servicio.py          # Prueba de humo contra el servicio publicado
-│   └── app/
-│       ├── esquemas.py             # Formato de entrada y salida
-│       └── main.py                 # Servicio FastAPI
+│   ├── probar_servicio.py          # Prueba de humo contra el servicio
+│   └── app/                        # Servicio FastAPI
 ├── tests/test_servicio.py          # Pruebas
 ├── requirements.txt                # Dependencias con versiones fijas
-└── render.yaml                     # Configuración para Render (Python 3.11)
+└── render.yaml                     # Configuración para Render
 ```
-
-## Ejecución local
-
-Necesita Python 3.11, 3.12 o 3.13. **No use Python 3.14 ni 3.10 o anteriores**: con esas versiones la instalación falla. Compruebe su versión con `python --version`; en Windows, `py --list` muestra las versiones instaladas. Si solo tiene 3.14, instale también la 3.13 desde <https://www.python.org/downloads/> y cree el entorno con ella.
-
-```bash
-git clone https://github.com/ebuitrago/demo-reg-clas-canciones.git
-cd demo-reg-clas-canciones
-python -m venv .venv                 # Windows, eligiendo versión: py -3.13 -m venv .venv
-source .venv/bin/activate            # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-
-pytest -q                            # comprueba que models/modelo.pkl carga y responde
-uvicorn src.app.main:app --reload    # http://127.0.0.1:8000/docs
-```
-
-Con el servicio arriba, en otra terminal:
-
-```bash
-python -m src.probar_servicio
-```
-
-## Publicar en Render
-
-Render tiene un plan gratuito que no pide tarjeta de crédito.
-
-1. Cree en su cuenta de GitHub un repositorio propio con este contenido y su `models/modelo.pkl`. Puede usar **Fork** o crear un repositorio nuevo y subir los archivos.
-2. Entre a <https://render.com> con su cuenta de GitHub.
-3. En el panel elija **New +**, luego **Blueprint**, seleccione su repositorio y confirme con **Apply**. Render lee `render.yaml` y tarda entre 3 y 5 minutos en construir el servicio.
-4. Copie la URL que asigna Render y compruébela:
-
-   ```bash
-   python -m src.probar_servicio https://su-servicio.onrender.com
-   ```
-
-Render vuelve a publicar el servicio cada vez que usted sube un cambio a GitHub. Para el sprint 2 basta con subir el nuevo `models/modelo.pkl`.
-
-En el plan gratuito el servicio se suspende tras 15 minutos sin uso, y la primera petición después de eso tarda cerca de un minuto. La prueba de humo espera hasta 90 segundos.
-
-## Problemas frecuentes
-
-| Síntoma | Qué hacer |
-|---|---|
-| `pip install` falla con "No matching distribution found" | Su versión de Python no es compatible. Cree el entorno con Python 3.11, 3.12 o 3.13 |
-| En Windows, PowerShell no deja ejecutar `activate` | Ejecute una vez `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` y vuelva a intentar |
-| Aviso de que el modelo se creó con otra versión de scikit-learn | Reentrene con las versiones de `requirements.txt` |
-| `503` en `/modelo` o `/predecir` | Falta `models/modelo.pkl` en el repositorio |
-| `422` en `/predecir` | La entrada no cumple el formato de `src/app/esquemas.py`; el detalle de la respuesta indica el campo |
-| `AttributeError` al cargar el modelo | El pipeline usa una función que no está en `src/variables.py`. Muévala allí y reentrene |
-| `ModuleNotFoundError: No module named 'src'` | Ejecute los comandos desde la raíz del repositorio |
-| La primera petición a Render tarda o falla | El servicio estaba suspendido. Repita en un minuto |
 
 ---
 
-<div align="center">
-<sub>Universidad Central, Ingeniería de Sistemas, 2026-2. Prof. Elias Buitrago Bolivar</sub>
-</div>
+## Uso de un asistente de IA
+
+Parte del código de entrenamiento (variantes Ridge y Lasso, gradient boosting) y de la documentación se elaboró con apoyo de un asistente de IA. Los resultados de este documento provienen de las ejecuciones locales descritas arriba, no de las respuestas del asistente. Las cifras marcadas como "Material del curso" en el registro comparativo no se midieron en este repositorio.
+
+---
+
+## Referencias
+
+- Kaufman, S., Rosset, S., Perlich, C., & Stitelman, O. (2012). Leakage in data mining: Formulation, detection, and avoidance. *ACM Transactions on Knowledge Discovery from Data, 6*(4).
+- Kapoor, S., & Narayanan, A. (2023). Leakage and the reproducibility crisis in machine-learning-based science. *Patterns, 4*(9).
+- Hyndman, R. J., & Athanasopoulos, G. (2021). *Forecasting: Principles and practice* (3.ª ed.). OTexts.
+- Scikit-learn Developers. *User Guide*: Pipeline, Common pitfalls (data leakage), Metrics and scoring.
