@@ -4,6 +4,8 @@ Taller en dos sprints para una disquera que debe decidir, **antes del lanzamient
 
 - **Sprint 1, regresión:** estimar la popularidad (0 a 100) de una canción nueva y recomendar si se promociona.
 - **Sprint 2, clasificación binaria:** decidir la promoción según lo que cuesta equivocarse.
+- **Link de Render:
+https://demo-reg-clas-canciones1-bg3d.onrender.com/
 
 Cada sprint cierra con un incremento en producción: un servicio FastAPI publicado en Render que lee un único archivo, `models/modelo.pkl`, con el modelo entrenado y su ficha.
 
