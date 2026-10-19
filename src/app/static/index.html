@@ -62,7 +62,7 @@ a{color:var(--accent)}
 </head>
 <body>
 <main>
-  <h1>¿Promocionamos esta canción?</h1>
+  <h1>¿Será un hit esta canción?</h1>
   <p class="sub">Describa la canción tal como será al lanzarla. El modelo estima su popularidad y le dice si conviene invertir en promoción.</p>
 
   <div class="grid">
@@ -125,7 +125,7 @@ function escala(valor, corte, min, max, banda, fmt, etiquetaCorte){
 
 function pintar(r){
   const clase = r.promocionar ? "go" : "stop";
-  const titulo = r.promocionar ? "Sí, promocionar" : "No promocionar";
+  const titulo = r.promocionar ? "Sí, será un hit" : "No, no será un hit";
   let grafico, detalle;
   if (r.tarea === "regresion"){
     grafico = escala(r.popularidad_esperada, r.corte_promocion, 0, 100, r.rango, v => v.toFixed(v%1?1:0), "corte");
